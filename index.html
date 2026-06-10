@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How a Reinforcement-Learning Agent Learns</title>
+<style>
+  :root{
+    --bg:#FAFAFC; --panel:#FFFFFF; --ink:#1C2433; --muted:#6B7280;
+    --border:#E6E8EE; --soft:#F3F4F8;
+    --a:#0D9488;   /* Option A */
+    --b:#E07A1F;   /* Option B */
+    --pos:#16A34A; --neg:#DC2626; --rev:#8B5CF6;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:var(--sans); color:var(--ink); background:var(--bg);
+    padding:20px; line-height:1.4;
+  }
+  .wrap{max-width:1180px; margin:0 auto}
+  header{margin-bottom:14px}
+  h1{font-size:24px; margin:0 0 4px}
+  .sub{color:var(--muted); font-size:14px; margin:0}
+  .eq{font-family:var(--mono); background:var(--soft); border:1px solid var(--border);
+      border-radius:10px; padding:10px 14px; margin-top:10px; font-size:15px; display:inline-block}
+  .eq b{color:var(--a)} .eq i{color:var(--rev); font-style:normal}
+
+  .grid{display:grid; grid-template-columns:330px 1fr; gap:18px; margin-top:16px}
+  @media(max-width:880px){ .grid{grid-template-columns:1fr} }
+
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px}
+  .card h2{font-size:13px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted);
+           margin:0 0 12px; font-weight:700}
+
+  .ctrl{margin-bottom:16px}
+  .ctrl .row{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px}
+  .ctrl label{font-weight:600; font-size:14px}
+  .ctrl .val{font-family:var(--mono); font-size:14px; color:var(--ink)}
+  .hint{color:var(--muted); font-size:12px; margin-top:3px}
+  input[type=range]{width:100%; accent-color:var(--ink); height:22px}
+  .ends{display:flex; justify-content:space-between; color:var(--muted); font-size:11px; margin-top:-2px}
+
+  .presets{display:flex; flex-wrap:wrap; gap:8px}
+  button{font-family:var(--sans); font-size:13px; cursor:pointer; border-radius:9px;
+         border:1px solid var(--border); background:#fff; color:var(--ink); padding:7px 11px}
+  button:hover{background:var(--soft)}
+  button:focus-visible{outline:2px solid var(--rev); outline-offset:2px}
+  .preset.aging{border-color:#D9C7F2; background:#F7F2FE}
+  .runbar{display:flex; gap:10px; margin-top:6px}
+  .btn-primary{background:var(--ink); color:#fff; border-color:var(--ink); font-weight:600; flex:1}
+  .btn-primary:hover{background:#0d1320}
+  .toggle{display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; cursor:pointer}
+  .toggle input{width:16px; height:16px; accent-color:var(--ink)}
+  .adv{display:none; margin-top:12px; padding-top:12px; border-top:1px dashed var(--border)}
+  .adv.open{display:block}
+
+  .plotwrap{margin-bottom:6px}
+  svg{display:block; width:100%; height:auto}
+  .legend{display:flex; flex-wrap:wrap; gap:16px; font-size:12.5px; color:var(--muted); margin:4px 2px 14px}
+  .legend .k{display:inline-flex; align-items:center; gap:6px}
+  .sw{width:18px; height:3px; border-radius:2px; display:inline-block}
+  .sw.dash{height:0; border-top:2px dashed currentColor; width:18px}
+
+  .readout{display:grid; grid-template-columns:1fr 1fr; gap:10px 22px; font-family:var(--mono);
+            font-size:14px; background:var(--soft); border:1px solid var(--border);
+            border-radius:10px; padding:14px 16px}
+  .readout div{display:flex; justify-content:space-between}
+  .readout .lab{color:var(--muted)}
+  .stats{display:flex; flex-wrap:wrap; gap:10px; margin-top:12px}
+  .stat{flex:1; min-width:120px; background:#fff; border:1px solid var(--border); border-radius:10px; padding:10px 12px}
+  .stat .n{font-size:24px; font-weight:700; font-family:var(--mono)}
+  .stat .l{font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>How a reinforcement-learning agent learns from feedback</h1>
+    <p class="sub">Two machines, hidden payout rates. The agent must <em>discover</em> which is better by trying them and learning from each outcome.</p>
+    <div class="eq">Q(chosen) &larr; Q(chosen) + <b>&alpha;</b> &times; <i>(reward &minus; Q(chosen))</i>&nbsp;&nbsp;&nbsp;<span style="color:var(--muted)">prediction error = reward &minus; Q</span></div>
+  </header>
+
+  <div class="grid">
+    <!-- ---------------- CONTROLS ---------------- -->
+    <div class="card">
+      <h2>The agent&rsquo;s settings</h2>
+
+      <div class="ctrl">
+        <div class="row"><label for="alpha">Learning rate &alpha;</label><span class="val" id="alphaV">0.30</span></div>
+        <input id="alpha" type="range" min="0.02" max="1" step="0.01" value="0.30">
+        <div class="ends"><span>slow, stable</span><span>fast, jumpy</span></div>
+        <div class="hint">How much each new outcome moves the value estimate.</div>
+      </div>
+
+      <div class="ctrl">
+        <div class="row"><label for="beta">Choice consistency &beta;</label><span class="val" id="betaV">5.0</span></div>
+        <input id="beta" type="range" min="0" max="12" step="0.2" value="5">
+        <div class="ends"><span>explore (random)</span><span>exploit (greedy)</span></div>
+        <div class="hint">How strongly choices follow the higher-valued option.</div>
+      </div>
+
+      <label class="toggle"><input type="checkbox" id="advChk"> Separate learning from good vs. bad outcomes</label>
+      <div class="hint">For the aging discussion: do you update more after a better-than-expected or a worse-than-expected result?</div>
+      <div class="adv" id="adv">
+        <div class="ctrl">
+          <div class="row"><label for="aPlus">&alpha;<sup>+</sup> &nbsp;better than expected</label><span class="val" id="aPlusV">0.30</span></div>
+          <input id="aPlus" type="range" min="0.02" max="1" step="0.01" value="0.30">
+        </div>
+        <div class="ctrl">
+          <div class="row"><label for="aMinus">&alpha;<sup>&minus;</sup> &nbsp;worse than expected</label><span class="val" id="aMinusV">0.30</span></div>
+          <input id="aMinus" type="range" min="0.02" max="1" step="0.01" value="0.30">
+        </div>
+      </div>
+
+      <h2 style="margin-top:18px">The task</h2>
+      <div class="ctrl">
+        <div class="row"><label for="pa">Machine A payout</label><span class="val" id="paV">75%</span></div>
+        <input id="pa" type="range" min="0" max="100" step="5" value="75">
+      </div>
+      <div class="ctrl">
+        <div class="row"><label for="pb">Machine B payout</label><span class="val" id="pbV">25%</span></div>
+        <input id="pb" type="range" min="0" max="100" step="5" value="25">
+      </div>
+      <label class="toggle"><input type="checkbox" id="revChk"> Swap the machines halfway (reversal)</label>
+      <div class="hint">Tests how quickly the agent adapts when the world changes.</div>
+
+      <h2 style="margin-top:18px">Try a profile</h2>
+      <div class="presets">
+        <button class="preset" data-p="balanced">Balanced</button>
+        <button class="preset" data-p="fast">Fast learner</button>
+        <button class="preset" data-p="slow">Slow learner</button>
+        <button class="preset" data-p="explorer">Big explorer</button>
+        <button class="preset" data-p="exploiter">Set in their ways</button>
+        <button class="preset aging" data-p="older">Older adult*</button>
+      </div>
+      <div class="hint">*Illustrative only: noisier choices + learns a bit more from bad outcomes, a pattern reported in some aging studies.</div>
+
+      <div class="runbar">
+        <button class="btn-primary" id="run">Run</button>
+        <button id="animate">Watch it learn</button>
+      </div>
+    </div>
+
+    <!-- ---------------- VISUALS ---------------- -->
+    <div class="card">
+      <h2>What the agent believes &mdash; value of each machine over time</h2>
+      <div class="plotwrap"><svg id="valPlot" viewBox="0 0 760 300" role="img" aria-label="Learned values over trials"></svg></div>
+      <div class="legend">
+        <span class="k" style="color:var(--a)"><span class="sw" style="background:var(--a)"></span> Q(A) belief</span>
+        <span class="k" style="color:var(--b)"><span class="sw" style="background:var(--b)"></span> Q(B) belief</span>
+        <span class="k"><span class="sw dash"></span> true payout rate</span>
+        <span class="k" style="color:var(--rev)"><span class="sw dash"></span> reversal</span>
+      </div>
+
+      <h2>What the agent did &mdash; each choice and its outcome</h2>
+      <div class="plotwrap"><svg id="rasterPlot" viewBox="0 0 760 70" role="img" aria-label="Choices per trial"></svg></div>
+      <div class="legend">
+        <span class="k" style="color:var(--a)"><span class="sw" style="background:var(--a)"></span> chose A</span>
+        <span class="k" style="color:var(--b)"><span class="sw" style="background:var(--b)"></span> chose B</span>
+        <span class="k">solid = won &nbsp;&middot;&nbsp; faint = no payout</span>
+      </div>
+
+      <div class="readout" id="readout">
+        <div><span class="lab">trial</span><span id="rTrial">120 / 120</span></div>
+        <div><span class="lab">P(choose A)</span><span id="rP">&mdash;</span></div>
+        <div><span class="lab">last choice</span><span id="rChoice">&mdash;</span></div>
+        <div><span class="lab">Q(A)</span><span id="rQA">&mdash;</span></div>
+        <div><span class="lab">outcome</span><span id="rOut">&mdash;</span></div>
+        <div><span class="lab">Q(B)</span><span id="rQB">&mdash;</span></div>
+        <div><span class="lab">prediction error &delta;</span><span id="rPE">&mdash;</span></div>
+        <div><span class="lab">&nbsp;</span><span>&nbsp;</span></div>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><div class="n" id="sOpt">&mdash;</div><div class="l">chose the better machine</div></div>
+        <div class="stat" id="sSplitWrap"><div class="n" id="sSplit">&mdash;</div><div class="l">before / after reversal</div></div>
+        <div class="stat"><div class="n" id="sRew">&mdash;</div><div class="l">total payout won</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const N = 120, REV = 60;
+
+  // ---- controls ----
+  const el = {
+    alpha:$("alpha"), beta:$("beta"), aPlus:$("aPlus"), aMinus:$("aMinus"),
+    pa:$("pa"), pb:$("pb"), advChk:$("advChk"), revChk:$("revChk")
+  };
+  function syncLabels(){
+    $("alphaV").textContent = (+el.alpha.value).toFixed(2);
+    $("betaV").textContent  = (+el.beta.value).toFixed(1);
+    $("aPlusV").textContent = (+el.aPlus.value).toFixed(2);
+    $("aMinusV").textContent= (+el.aMinus.value).toFixed(2);
+    $("paV").textContent = el.pa.value + "%";
+    $("pbV").textContent = el.pb.value + "%";
+  }
+  // when advanced is OFF, the two split rates mirror alpha
+  function mirrorAlpha(){
+    if(!el.advChk.checked){ el.aPlus.value = el.alpha.value; el.aMinus.value = el.alpha.value; }
+    syncLabels();
+  }
+
+  // ---- simulation ----
+  let traj = null;
+  function softmaxA(qA,qB,beta){
+    const m = Math.max(qA,qB);
+    const ea = Math.exp(beta*(qA-m)), eb = Math.exp(beta*(qB-m));
+    return ea/(ea+eb);
+  }
+  function simulate(){
+    const beta=+el.beta.value, aP=+el.aPlus.value, aM=+el.aMinus.value;
+    const pA0=+el.pa.value/100, pB0=+el.pb.value/100, rev=el.revChk.checked;
+    let qA=0.5, qB=0.5;
+    const Qa=[qA], Qb=[qB], Pa=[], choice=[], reward=[], pe=[], optimal=[];
+    for(let t=0;t<N;t++){
+      const swapped = rev && t>=REV;
+      const pA = swapped ? pB0 : pA0;
+      const pB = swapped ? pA0 : pB0;
+      const pa = softmaxA(qA,qB,beta);
+      const chooseA = Math.random() < pa;
+      const pChosen = chooseA ? pA : pB;
+      const r = Math.random() < pChosen ? 1 : 0;
+      const q = chooseA ? qA : qB;
+      const delta = r - q;
+      const a = delta>=0 ? aP : aM;
+      const nq = q + a*delta;
+      if(chooseA) qA=nq; else qB=nq;
+      // record the better machine (ties -> A)
+      const betterA = pA>=pB;
+      Pa.push(pa); choice.push(chooseA?0:1); reward.push(r); pe.push(delta);
+      optimal.push((chooseA && betterA) || (!chooseA && !betterA) ? 1:0);
+      Qa.push(qA); Qb.push(qB);
+    }
+    // true-rate step lines
+    const trueA = {pre:pA0, post: rev?pB0:pA0};
+    const trueB = {pre:pB0, post: rev?pA0:pB0};
+    traj = {Qa,Qb,Pa,choice,reward,pe,optimal,trueA,trueB,rev};
+    return traj;
+  }
+
+  // ---- drawing ----
+  const VP={w:760,h:300,l:42,r:14,t:14,b:26};
+  const RP={w:760,h:70,l:42,r:14,t:10,b:22};
+  const SVGNS="http://www.w3.org/2000/svg";
+  function mk(tag,attrs){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+  const xVal = t => VP.l + (t/N)*(VP.w-VP.l-VP.r);
+  const yVal = v => VP.t + (1-v)*(VP.h-VP.t-VP.b);
+
+  function stepLine(svg,trueObj,color){
+    const xMid=xVal(REV), x0=xVal(0), x1=xVal(N);
+    const yPre=yVal(trueObj.pre), yPost=yVal(trueObj.post);
+    if(traj.rev){
+      svg.appendChild(mk("line",{x1:x0,y1:yPre,x2:xMid,y2:yPre,stroke:color,"stroke-width":1.5,"stroke-dasharray":"5 4",opacity:.55}));
+      svg.appendChild(mk("line",{x1:xMid,y1:yPost,x2:x1,y2:yPost,stroke:color,"stroke-width":1.5,"stroke-dasharray":"5 4",opacity:.55}));
+    } else {
+      svg.appendChild(mk("line",{x1:x0,y1:yPre,x2:x1,y2:yPre,stroke:color,"stroke-width":1.5,"stroke-dasharray":"5 4",opacity:.55}));
+    }
+  }
+  function poly(svg,arr,upto,color){
+    let pts="";
+    for(let i=0;i<=upto;i++) pts += xVal(i)+","+yVal(arr[i])+" ";
+    svg.appendChild(mk("polyline",{points:pts.trim(),fill:"none",stroke:color,"stroke-width":2.6,"stroke-linejoin":"round","stroke-linecap":"round"}));
+  }
+  function drawValues(upto){
+    const svg=$("valPlot"); svg.innerHTML="";
+    // gridlines + y labels at 0,.25,.5,.75,1
+    [0,.25,.5,.75,1].forEach(v=>{
+      const y=yVal(v);
+      svg.appendChild(mk("line",{x1:VP.l,y1:y,x2:VP.w-VP.r,y2:y,stroke:"#EDEFF4","stroke-width":1}));
+      const tx=mk("text",{x:VP.l-8,y:y+4,"text-anchor":"end","font-size":11,fill:"#9AA1AD","font-family":"var(--mono)"});
+      tx.textContent=v.toFixed(2); svg.appendChild(tx);
+    });
+    // reversal marker
+    if(traj.rev){
+      const x=xVal(REV);
+      svg.appendChild(mk("line",{x1:x,y1:VP.t,x2:x,y2:VP.h-VP.b,stroke:"var(--rev)","stroke-width":1.5,"stroke-dasharray":"3 4",opacity:.8}));
+    }
+    stepLine(svg,traj.trueA,"#0D9488");
+    stepLine(svg,traj.trueB,"#E07A1F");
+    poly(svg,traj.Qa,upto,"#0D9488");
+    poly(svg,traj.Qb,upto,"#E07A1F");
+    // x label
+    const xl=mk("text",{x:(VP.l+VP.w-VP.r)/2,y:VP.h-4,"text-anchor":"middle","font-size":11,fill:"#9AA1AD"});
+    xl.textContent="trials \u2192"; svg.appendChild(xl);
+  }
+  function drawRaster(upto){
+    const svg=$("rasterPlot"); svg.innerHTML="";
+    const plotW=RP.w-RP.l-RP.r, bw=plotW/N;
+    for(let i=0;i<upto;i++){
+      const x=RP.l + i*bw;
+      const col = traj.choice[i]===0 ? "#0D9488" : "#E07A1F";
+      svg.appendChild(mk("rect",{x:x, y:RP.t, width:Math.max(bw-0.4,0.8), height:RP.h-RP.t-RP.b,
+        fill:col, opacity: traj.reward[i] ? 0.95 : 0.30}));
+    }
+    if(traj.rev && upto>0){
+      const x=RP.l + REV*bw;
+      svg.appendChild(mk("line",{x1:x,y1:RP.t-2,x2:x,y2:RP.h-RP.b+2,stroke:"var(--rev)","stroke-width":1.5,"stroke-dasharray":"3 4",opacity:.85}));
+    }
+    const lbl=mk("text",{x:RP.l,y:RP.h-6,"font-size":11,fill:"#9AA1AD"});
+    lbl.textContent="trial 1"; svg.appendChild(lbl);
+    const lbl2=mk("text",{x:RP.w-RP.r,y:RP.h-6,"text-anchor":"end","font-size":11,fill:"#9AA1AD"});
+    lbl2.textContent="trial "+N; svg.appendChild(lbl2);
+  }
+
+  // ---- readouts ----
+  function updateReadout(upto){
+    const i=upto-1;
+    $("rTrial").textContent = upto+" / "+N;
+    if(i<0){ ["rP","rChoice","rOut","rQA","rQB","rPE"].forEach(k=>$(k).textContent="\u2014"); return; }
+    $("rP").textContent  = traj.Pa[i].toFixed(2);
+    $("rChoice").innerHTML = traj.choice[i]===0
+      ? '<span style="color:var(--a)">Machine A</span>' : '<span style="color:var(--b)">Machine B</span>';
+    $("rOut").textContent = traj.reward[i] ? "+1  (won)" : " 0  (nothing)";
+    $("rQA").textContent = traj.Qa[i+1].toFixed(2);
+    $("rQB").textContent = traj.Qb[i+1].toFixed(2);
+    const d=traj.pe[i];
+    $("rPE").innerHTML = '<span style="color:'+(d>=0?'var(--pos)':'var(--neg)')+'">'+(d>=0?"+":"")+d.toFixed(2)+'</span>';
+  }
+  function updateStats(){
+    const opt=traj.optimal, totalOpt=opt.reduce((a,b)=>a+b,0);
+    $("sOpt").textContent = Math.round(100*totalOpt/N)+"%";
+    $("sRew").textContent = traj.reward.reduce((a,b)=>a+b,0);
+    if(traj.rev){
+      $("sSplitWrap").style.display="";
+      const pre=opt.slice(0,REV).reduce((a,b)=>a+b,0), post=opt.slice(REV).reduce((a,b)=>a+b,0);
+      $("sSplit").textContent = Math.round(100*pre/REV)+"% / "+Math.round(100*post/(N-REV))+"%";
+    } else {
+      $("sSplitWrap").style.display="none";
+    }
+  }
+
+  function showAll(){
+    drawValues(N); drawRaster(N); updateReadout(N); updateStats();
+  }
+  let timer=null;
+  function stopAnim(){ if(timer){clearInterval(timer); timer=null;} }
+  function run(){ stopAnim(); simulate(); showAll(); }
+  function animate(){
+    stopAnim(); simulate(); updateStats();
+    if(reduceMotion){ showAll(); return; }
+    let k=0;
+    timer=setInterval(()=>{
+      k++; drawValues(k); drawRaster(k); updateReadout(k);
+      if(k>=N){ stopAnim(); }
+    }, 28);
+  }
+
+  // ---- presets ----
+  const PRESETS={
+    balanced:{alpha:.30,beta:5,adv:false},
+    fast:    {alpha:.75,beta:5,adv:false},
+    slow:    {alpha:.08,beta:5,adv:false},
+    explorer:{alpha:.30,beta:1.4,adv:false},
+    exploiter:{alpha:.30,beta:11,adv:false},
+    older:   {beta:2.2,adv:true,aPlus:.18,aMinus:.34}
+  };
+  function applyPreset(name){
+    const p=PRESETS[name]; if(!p) return;
+    if("alpha" in p) el.alpha.value=p.alpha;
+    if("beta" in p)  el.beta.value=p.beta;
+    el.advChk.checked=!!p.adv; $("adv").classList.toggle("open",!!p.adv);
+    if(p.adv){ el.aPlus.value=p.aPlus; el.aMinus.value=p.aMinus; }
+    else { el.aPlus.value=el.alpha.value; el.aMinus.value=el.alpha.value; }
+    syncLabels(); run();
+  }
+
+  // ---- wiring ----
+  [el.alpha,el.beta,el.pa,el.pb].forEach(s=>s.addEventListener("input",mirrorAlpha));
+  [el.aPlus,el.aMinus].forEach(s=>s.addEventListener("input",syncLabels));
+  el.advChk.addEventListener("change",()=>{ $("adv").classList.toggle("open",el.advChk.checked); mirrorAlpha(); });
+  el.revChk.addEventListener("change",run);
+  $("run").addEventListener("click",run);
+  $("animate").addEventListener("click",animate);
+  document.querySelectorAll(".preset").forEach(b=>b.addEventListener("click",()=>applyPreset(b.dataset.p)));
+
+  // init
+  syncLabels(); run();
+})();
+</script>
+</body>
+</html>
