@@ -79,7 +79,7 @@
 <div class="wrap">
   <header>
     <h1>How a reinforcement-learning agent learns from feedback</h1>
-    <p class="sub">Two machines, hidden payout rates. The agent must <em>discover</em> which is better by trying them and learning from each outcome.</p>
+    <p class="sub">Two options, hidden payout rates. The agent must <em>discover</em> which is better by trying them and learning from each outcome.</p>
     <div class="eq">Q(chosen) &larr; Q(chosen) + <b>&alpha;</b> &times; <i>(reward &minus; Q(chosen))</i>&nbsp;&nbsp;&nbsp;<span style="color:var(--muted)">prediction error = reward &minus; Q</span></div>
   </header>
 
@@ -117,14 +117,14 @@
 
       <h2 style="margin-top:18px">The task</h2>
       <div class="ctrl">
-        <div class="row"><label for="pa">Machine A payout</label><span class="val" id="paV">75%</span></div>
+        <div class="row"><label for="pa">Option A payout</label><span class="val" id="paV">75%</span></div>
         <input id="pa" type="range" min="0" max="100" step="5" value="75">
       </div>
       <div class="ctrl">
-        <div class="row"><label for="pb">Machine B payout</label><span class="val" id="pbV">25%</span></div>
+        <div class="row"><label for="pb">Option B payout</label><span class="val" id="pbV">25%</span></div>
         <input id="pb" type="range" min="0" max="100" step="5" value="25">
       </div>
-      <label class="toggle"><input type="checkbox" id="revChk"> Swap the machines halfway (reversal)</label>
+      <label class="toggle"><input type="checkbox" id="revChk"> Swap the option halfway (reversal)</label>
       <div class="hint">Tests how quickly the agent adapts when the world changes.</div>
 
       <h2 style="margin-top:18px">Try a profile</h2>
@@ -146,11 +146,11 @@
 
     <!-- ---------------- VISUALS ---------------- -->
     <div class="card">
-      <h2>What the agent believes &mdash; value of each machine over time</h2>
+      <h2>What the agent believes &mdash; value of each option over time</h2>
       <div class="plotwrap"><svg id="valPlot" viewBox="0 0 760 300" role="img" aria-label="Learned values over trials"></svg></div>
       <div class="legend">
-        <span class="k" style="color:var(--a)"><span class="sw" style="background:var(--a)"></span> Q(A) belief</span>
-        <span class="k" style="color:var(--b)"><span class="sw" style="background:var(--b)"></span> Q(B) belief</span>
+        <span class="k" style="color:var(--a)"><span class="sw" style="background:var(--a)"></span> Q(A) value</span>
+        <span class="k" style="color:var(--b)"><span class="sw" style="background:var(--b)"></span> Q(B) value</span>
         <span class="k"><span class="sw dash"></span> true payout rate</span>
         <span class="k" style="color:var(--rev)"><span class="sw dash"></span> reversal</span>
       </div>
@@ -160,7 +160,7 @@
       <div class="legend">
         <span class="k" style="color:var(--a)"><span class="sw" style="background:var(--a)"></span> chose A</span>
         <span class="k" style="color:var(--b)"><span class="sw" style="background:var(--b)"></span> chose B</span>
-        <span class="k">solid = won &nbsp;&middot;&nbsp; faint = no payout</span>
+        <span class="k">dark = won &nbsp;&middot;&nbsp; Light = no payout</span>
       </div>
 
       <div class="readout" id="readout">
@@ -175,7 +175,7 @@
       </div>
 
       <div class="stats">
-        <div class="stat"><div class="n" id="sOpt">&mdash;</div><div class="l">chose the better machine</div></div>
+        <div class="stat"><div class="n" id="sOpt">&mdash;</div><div class="l">chose the better option</div></div>
         <div class="stat" id="sSplitWrap"><div class="n" id="sSplit">&mdash;</div><div class="l">before / after reversal</div></div>
         <div class="stat"><div class="n" id="sRew">&mdash;</div><div class="l">total payout won</div></div>
       </div>
@@ -234,7 +234,7 @@
       const a = delta>=0 ? aP : aM;
       const nq = q + a*delta;
       if(chooseA) qA=nq; else qB=nq;
-      // record the better machine (ties -> A)
+      // record the better option (ties -> A)
       const betterA = pA>=pB;
       Pa.push(pa); choice.push(chooseA?0:1); reward.push(r); pe.push(delta);
       optimal.push((chooseA && betterA) || (!chooseA && !betterA) ? 1:0);
@@ -318,7 +318,7 @@
     if(i<0){ ["rP","rChoice","rOut","rQA","rQB","rPE"].forEach(k=>$(k).textContent="\u2014"); return; }
     $("rP").textContent  = traj.Pa[i].toFixed(2);
     $("rChoice").innerHTML = traj.choice[i]===0
-      ? '<span style="color:var(--a)">Machine A</span>' : '<span style="color:var(--b)">Machine B</span>';
+      ? '<span style="color:var(--a)">Option A</span>' : '<span style="color:var(--b)">Option B</span>';
     $("rOut").textContent = traj.reward[i] ? "+1  (won)" : " 0  (nothing)";
     $("rQA").textContent = traj.Qa[i+1].toFixed(2);
     $("rQB").textContent = traj.Qb[i+1].toFixed(2);
